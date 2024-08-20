@@ -1,53 +1,28 @@
-...
-# TM     : 관측시각 (KST)
-# STN    : 국내 지점번호
-# RN     : 강수량 (mm) : 여름철에는 1시간강수량, 겨울철에는 3시간강수량
-# RN_DAY : 일강수량 (mm) : 해당시간까지 관측된 양(통계표)
-# RN_JUN : 일강수량 (mm) : 해당시간까지 관측된 양을 전문으로 입력한 값(전문)
-...
-
 import requests
 import json
 import math
-import pandas as pd
-import csv
 
-##################################################################################################################
-## 지점번호로 하나 가져와서
-## 강수량만 return
-##################################################################################################################
+def euclideanDistance(lat1, lon1, lat2, lon2):
+    lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
 
-
-# 위도 경도 입력 받음
-# 파일에서 읽어와서 가장 가까운 국내 지점번호 return
-# 처음 한 번에만 실행
-
-def haversine(lat1, lon1, lat2, lon2):
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     
-    # 유클리드 거리 계산
-    distance = math.sqrt(dlat**2 + dlon**2)
-    
-    return distance
+    return math.sqrt(dlat**2 + dlon**2)
+
+
+# 텍스트 응답에서 필요한 데이터 추출 함수
+def parse_response(response_text):
+    data_lines = [line for line in response_text.splitlines() if not line.startswith('#') and line.strip()]
+    return data_lines
+
 
 # 위도, 경도 찾는 함수
-def find_STN(lat, lng):
-    
-    with open('META.csv', 'r', encoding='cp949') as file:
-        csv_reader = csv.reader(file)
-        
-        for row in csv_reader:
-            print
-            
-            
-            
-            
-            
-    #url = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm5.php?tm=0&obs=TA&stn=0&disp=0&help=1&authKey=oEg3RFYKR-SIN0RWCtfkfA'
-    #url = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm5.php?tm2=201504060900&obs=TA&stn=0&disp=0&help=1&authKey=1rEfi1JvQG6xH4tSbwBu9Q'
-
+def find_STN(lat, lng):  
     closest_station = 0
+    
+    # 요청 시간 변수로 변환 ====================================================================================================================== 수정 필요
+    url = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm5.php?tm2=202408200900&obs=TA&stn=0&disp=0&help=1&authKey=1rEfi1JvQG6xH4tSbwBu9Q'
     
     response = requests.get(url)
 
@@ -60,24 +35,16 @@ def find_STN(lat, lng):
             # 주석 부분(#)을 제외하고 데이터 부분만 추출
             data_lines = [line for line in response_text.splitlines() if not line.startswith('#') and line.strip()]
             
-            # 데이터 열의 이름들
-            columns = [
-                "TM", "STN", "LON", "LAT", "HT", "VAL"]
-            
-            # 추출할 컬럼 목록 (위도 / 경도)
-            selected_columns = ["STN", "LAT", "LON"]
-            
             # 각 데이터 라인을 딕셔너리로 변환하고 필요한 열만 추출
             lat_data, lng_data = 0, 0
             min_distance = float('inf')
-            
-            print(len(data_lines))
+
             for line in data_lines:
                 values = line.split()  # 공백으로 분리
-                lat_data = float(values[2])   # 가져온 위도
-                lng_data = float(values[3])   # 가져온 경도
+                station_lat = float(values[2])   # 가져온 위도
+                station_lon = float(values[3])   # 가져온 경도
                 
-                distance = haversine(lat, lng, lat_data, lng_data)
+                distance = euclideanDistance(lat, lng, station_lat, station_lon)
                 if distance < min_distance:
                     min_distance = distance
                     closest_station = values[1]
@@ -91,9 +58,9 @@ def find_STN(lat, lng):
     return closest_station
     
 
-def rain():
-    # URL 문자열
-    url = 'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php?stn=0&help=1&authKey=oEg3RFYKR-SIN0RWCtfkfA'
+def judgment_rain(stn):
+    # 요청 시간 변수로 변환 ====================================================================================================================== 수정 필요
+    url = f'https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php?tm=202211300900&stn={stn}&help=1&authKey=1rEfi1JvQG6xH4tSbwBu9Q'
 
     # GET 요청
     response = requests.get(url)
@@ -116,7 +83,8 @@ def rain():
             ]
             
             # 추출할 컬럼 목록
-            selected_columns = ["TM", "STN", "RN", "RN_DAY", "RN_JUN"]
+            #selected_columns = ["TM", "STN", "RN", "RN_DAY", "RN_JUN"]
+            selected_columns = ["TM", "STN", "RN"]
             
             # 각 데이터 라인을 딕셔너리로 변환하고 필요한 열만 추출
             data = []
@@ -126,11 +94,7 @@ def rain():
                 selected_record = {col: record[col] for col in selected_columns}  # 필요한 열만 추출
                 data.append(selected_record)
             
-            # JSON 형식으로 변환하여 파일로 저장
-            with open('weather_data.json', 'w', encoding='utf-8') as json_file:
-                json.dump(data, json_file, indent=4, ensure_ascii=False)
-            
-            print("JSON 데이터가 'weather_data.json' 파일에 저장되었습니다.")
+            return data[0]['RN']
             
         except Exception as e:
             print(f"텍스트 응답을 처리하는 중 오류가 발생했습니다: {e}")
@@ -140,5 +104,11 @@ def rain():
         
         
 if __name__ == '__main__':
-    closest_station = find_STN(42.3167, 130.4)
-    print(closest_station)
+    '''
+    현재 90 ~ 296까지 운영 중
+    유클리드 거리로 가장 가까운 지점 번호 가져옴 -> 고려 (만약에 범위가 크게 벗어나면)
+    '''
+    closest_station = find_STN(42.3167, 130.4)  # 102번 (37.9661, 124.6305)
+    print("STN", closest_station)
+    
+    print(judgment_rain(closest_station))
